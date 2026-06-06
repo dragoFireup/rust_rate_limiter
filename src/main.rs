@@ -13,10 +13,14 @@ fn main() {
 
     println!("[INIT] Simulating 6 multi-threaded calls to the service..");
 
-    for task_id in 1..6 {
+    for task_id in 1..7 {
         let limiter_ref = Arc::clone(&limiter);
 
         let handle = thread::spawn(move || {
+            if task_id%6 == 0 {
+                println!("[THREAD#{:02}] Sleeping for 1 second to let window pass", task_id);
+                thread::sleep(Duration::from_secs(1));
+            }
             if limiter_ref.acquire() {
                 println!("[THREAD#{:02}] Request processed state: SUCCESSFUL", task_id);
             } else {
