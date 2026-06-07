@@ -1,18 +1,65 @@
-# Rate Limiter - Rust
+# Rust Rate Limiter
 
-This is a practice project in which I aim to create a rate limiter in rust from scratch and test.
+A high-performance, thread-safe rate limiter implemented in Rust. This project serves as a hands-on exploration of Rust concurrency primitives, Dockerization, and rate-limiting infrastructure.
 
-I aim to learn ahout Rust, Docker, and Rate limiting infra.
+## 🚀 Overview
 
-Though this is the first step I will increase the complexity as it goes ahead.
+This repository implements a **Sliding Window Log** rate limiting algorithm. It is designed to handle multi-threaded environments efficiently using Rust's `Arc` and `Mutex` primitives.
 
-### Steps to run using docker
+### Why this project?
+- **Rust Learning:** Deep dive into ownership, threading, and synchronization.
+- **Infrastructure:** Practice containerizing Rust applications using Docker.
+- **Algorithms:** Implementation of common system design patterns for traffic shaping.
+
+---
+
+## 🛠 Features
+
+- **Sliding Window Log Algorithm:** Provides precise rate limiting by tracking individual request timestamps.
+- **Thread-Safe Implementation:** Built with `std::sync::Mutex` and `Arc` to support concurrent requests.
+- **Docker Ready:** Includes a Dockerfile for easy deployment and testing.
+- **Simulation Suite:** Built-in multi-threaded test simulation in `main.rs`.
+
+---
+
+## 📦 Getting Started
+
+### Prerequisites
+- [Rust](https://www.rust-lang.org/tools/install) (Edition 2021)
+- [Docker](https://docs.docker.com/get-docker/) (optional)
+
+### Running Locally
+```bash
+# Clone the repository
+git clone https://github.com/your-username/rust-rate-limiter.git
+cd rust-rate-limiter
+
+# Run the simulation
+cargo run
 ```
-$ docker buildx build -t rate_limiter:v1 .
-$ docker run --rm rate_limiter:v1
+
+### Running with Docker
+```bash
+# Build the image
+docker build -t rate-limiter:v1 .
+
+# Run the container
+docker run --rm rate-limiter:v1
 ```
 
-### Plans (To be updated as I build it further)
+---
 
-- [x] Create a simple rate limiter and test mechanism.
-- [ ] Docker setup to run rust application
+## 🗺 Roadmap
+
+This project is an evolving learning journey. Future milestones include:
+
+- [x] Basic Sliding Window Log implementation.
+- [x] Dockerization of the Rust application.
+- [ ] **Middleware Support:** Integration with web frameworks like Axum or Actix-web.
+
+
+---
+
+## 📝 License
+
+This project is open-source and available under the MIT License.
