@@ -7,3 +7,4 @@ I aim to learn ahout Rust, Docker, and Rate limiting infra.
 Though this is the first step I will increase the complexity as it goes ahead.
 
 - [x] Create a simple rate limiter and test mechanism.
+- [ ] Docker setup to run rust application
