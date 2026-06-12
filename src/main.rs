@@ -1,39 +1,100 @@
+mod rate_limiter_gateway;
+pub mod sliding_window_log;
+
+use ::axum::{body::Body, response::Response, routing::any, Router};
+use axum::extract::{Request, State};
+use axum::http::{HeaderMap, StatusCode, Uri};
+use axum::response::IntoResponse;
+use reqwest::{Body as RBody, Client};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
-mod sliding_window_log;
+use rate_limiter_gateway::RateLimiterGateway;
 
-use sliding_window_log::SlidingWindowLog;
+struct GatewayConfig {
+    limiter: RateLimiterGateway,
+    destination: String,
+}
 
-fn main() {
-    let limiter = Arc::new(SlidingWindowLog::new(Duration::from_secs(1), 3)); // 3 TPS
+struct AppState {
+    gateway_config: GatewayConfig,
+    http_client: Client,
+}
 
-    let mut execution_handle = vec![];
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt::init();
 
-    println!("[INIT] Simulating 6 multi-threaded calls to the service..");
+    let gateway_config = GatewayConfig {
+        limiter: RateLimiterGateway::new(Duration::from_secs(1), 10),
+        destination: "http://localhost:5000".to_string(),
+    };
 
-    for task_id in 1..7 {
-        let limiter_ref = Arc::clone(&limiter);
+    let http_client = Client::new();
 
-        let handle = thread::spawn(move || {
-            if task_id%6 == 0 {
-                println!("[THREAD#{:02}] Sleeping for 1 second to let window pass", task_id);
-                thread::sleep(Duration::from_secs(1));
-            }
-            if limiter_ref.acquire() {
-                println!("[THREAD#{:02}] Request processed state: SUCCESSFUL", task_id);
-            } else {
-                println!("[THREAD#{:02}] Request processed state: FAILED", task_id);
-            }
-        });
+    let shared_state = Arc::new(AppState {
+        gateway_config: gateway_config,
+        http_client: http_client,
+    });
 
-        execution_handle.push(handle);
+    let app = Router::new()
+        .route("/", any(proxy_handler))
+        .route("/{*path}", any(proxy_handler))
+        .with_state(shared_state);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn proxy_handler(
+    State(state): State<Arc<AppState>>,
+    uri: Uri,
+    request: Request<Body>,
+) -> Response {
+    let Some(client_id) = extract_client_identity(request.headers()) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+
+    let is_allowed = !client_id.is_empty();
+
+    if !is_allowed {
+        return Response::builder()
+            .status(StatusCode::TOO_MANY_REQUESTS)
+            .body(Body::from("Rate limit exceeded"))
+            .unwrap();
     }
 
-    for handle in execution_handle {
-        handle.join().unwrap();
-    }
+    let backend_url = format!("{}{}", state.gateway_config.destination, uri.path());
 
-    println!("Rate limiting multi-threaded simulation completed.");
+    let client = &state.http_client;
+
+    let (parts, body) = request.into_parts();
+
+    let proxy_request_body = RBody::wrap_stream(body.into_data_stream());
+
+    let proxy_response = match client
+        .request(parts.method, &backend_url)
+        .headers(parts.headers)
+        .body(proxy_request_body)
+        .send()
+        .await
+    {
+        Ok(res) => res,
+        Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
+    };
+
+    let mut response_builder = Response::builder().status(proxy_response.status());
+
+    *response_builder.headers_mut().unwrap() = proxy_response.headers().clone();
+
+    return response_builder
+        .body(Body::from_stream(proxy_response.bytes_stream()))
+        .unwrap();
+}
+
+fn extract_client_identity(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("ClientId")
+        .and_then(|value| value.to_str().ok())
+        .map(|s| s.to_string())
 }
