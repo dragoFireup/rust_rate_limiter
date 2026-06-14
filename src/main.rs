@@ -55,7 +55,7 @@ async fn proxy_handler(
         return StatusCode::UNAUTHORIZED.into_response();
     };
 
-    let is_allowed = !client_id.is_empty();
+    let is_allowed = is_client_allowed(client_id, &state.gateway_config.limiter);
 
     if !is_allowed {
         return Response::builder()
@@ -97,4 +97,12 @@ fn extract_client_identity(headers: &HeaderMap) -> Option<String> {
         .get("ClientId")
         .and_then(|value| value.to_str().ok())
         .map(|s| s.to_string())
+}
+
+fn is_client_allowed(clientId: String, limter: &RateLimiterGateway) -> bool {
+
+    let registry_read_guard = gateway_config.limiter
+
+
+    false
 }
