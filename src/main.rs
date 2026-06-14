@@ -27,7 +27,7 @@ async fn main() {
 
     let gateway_config = GatewayConfig {
         limiter: RateLimiterGateway::new(Duration::from_secs(1), 10),
-        destination: "http://host.docker.internal.:5000".to_string(),
+        destination: "http://host.docker.internal:5000".to_string(),
     };
 
     let http_client = Client::new();
