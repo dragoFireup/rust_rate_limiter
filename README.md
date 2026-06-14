@@ -55,7 +55,8 @@ This project is an evolving learning journey. Future milestones include:
 
 - [x] Basic Sliding Window Log implementation.
 - [x] Dockerization of the Rust application.
-- [ ] **Middleware Support:** Integration with web frameworks like Axum or Actix-web.
+- [x] **Middleware Support:** Integration with web frameworks like Axum or Actix-web- Created a proxy handler.
+- [ ] ClientId based ratelimiter
 
 
 ---
