@@ -8,12 +8,11 @@ pub struct SlidingWindowLog {
 impl SlidingWindowLog {
     pub fn new() -> Self {
         Self {
-            timestamps: VecDeque::new()
+            timestamps: VecDeque::new(),
         }
     }
 
     pub fn is_allowed(&mut self, window_size: Duration, max_requests: usize) -> bool {
-
         let now = Instant::now();
 
         let cutoff = now.checked_sub(window_size).unwrap();
@@ -33,6 +32,5 @@ impl SlidingWindowLog {
         }
 
         return false;
-
-    } 
+    }
 }

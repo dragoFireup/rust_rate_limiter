@@ -26,7 +26,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let gateway_config = GatewayConfig {
-        limiter: RateLimiterGateway::new(Duration::from_secs(1), 10),
+        limiter: RateLimiterGateway::new(Duration::from_mins(1), 1),
         destination: "http://localhost:5000".to_string(),
     };
 
@@ -55,7 +55,7 @@ async fn proxy_handler(
         return StatusCode::UNAUTHORIZED.into_response();
     };
 
-    let is_allowed = is_client_allowed(client_id, &state.gateway_config.limiter);
+    let is_allowed = is_client_allowed(&client_id.to_string(), &state.gateway_config.limiter);
 
     if !is_allowed {
         return Response::builder()
@@ -99,10 +99,6 @@ fn extract_client_identity(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn is_client_allowed(clientId: String, limter: &RateLimiterGateway) -> bool {
-
-    let registry_read_guard = gateway_config.limiter
-
-
-    false
+fn is_client_allowed(client_id: &str, limiter: &RateLimiterGateway) -> bool {
+    return limiter.check_allowance(client_id);
 }
