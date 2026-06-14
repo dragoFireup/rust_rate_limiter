@@ -27,7 +27,7 @@ async fn main() {
 
     let gateway_config = GatewayConfig {
         limiter: RateLimiterGateway::new(Duration::from_mins(1), 1),
-        destination: "http://localhost:5000".to_string(),
+        destination: "http://host.docker.internal.:5000".to_string(),
     };
 
     let http_client = Client::new();
@@ -55,7 +55,7 @@ async fn proxy_handler(
         return StatusCode::UNAUTHORIZED.into_response();
     };
 
-    let is_allowed = is_client_allowed(&client_id.to_string(), &state.gateway_config.limiter);
+    let is_allowed = state.gateway_config.limiter.check_allowance(client_id);
 
     if !is_allowed {
         return Response::builder()
@@ -92,13 +92,9 @@ async fn proxy_handler(
         .unwrap();
 }
 
-fn extract_client_identity(headers: &HeaderMap) -> Option<String> {
+fn extract_client_identity(headers: &HeaderMap) -> Option<&str> {
     headers
         .get("ClientId")
         .and_then(|value| value.to_str().ok())
-        .map(|s| s.to_string())
-}
-
-fn is_client_allowed(client_id: &str, limiter: &RateLimiterGateway) -> bool {
-    return limiter.check_allowance(client_id);
+        .map(|s| s)
 }

@@ -15,7 +15,7 @@ impl SlidingWindowLog {
     pub fn is_allowed(&mut self, window_size: Duration, max_requests: usize) -> bool {
         let now = Instant::now();
 
-        let cutoff = now.checked_sub(window_size).unwrap();
+        let cutoff = now.checked_sub(window_size).unwrap_or(now);
 
         // evict all timestamps outside the cutoff window
         while let Some(&timestamp) = self.timestamps.front() {
