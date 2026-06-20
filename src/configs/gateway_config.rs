@@ -44,8 +44,6 @@ impl GatewayConfig {
     async fn check_health(http_client: &Client, destination: &str) -> bool {
         let url = format!("{}/health", destination);
 
-        println!("Calling {}", url);
-
         http_client
             .get(url)
             .timeout(Duration::from_secs(2))
@@ -67,5 +65,17 @@ impl GatewayConfig {
             .fetch_add(1, Ordering::Relaxed);
 
         return Some(active[current_idx % active.len()].clone());
+    }
+
+    pub async fn run_health_check(&self) {
+        let mut active = VecDeque::new();
+
+        for destination in &self.destinations {
+            if Self::check_health(&self.http_client, destination).await {
+                active.push_back(destination.clone());
+            }
+        }
+
+        self.active_destinations.store(Arc::new(active));
     }
 }

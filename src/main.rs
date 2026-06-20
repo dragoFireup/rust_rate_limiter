@@ -39,6 +39,18 @@ async fn main() {
         http_client: http_client,
     });
 
+    let state_clone = shared_state.clone();
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(10));
+
+        loop {
+            interval.tick().await;
+
+            state_clone.gateway_config.run_health_check().await;
+        }
+    });
+
     let app = Router::new()
         .route("/", any(proxy_handler))
         .route("/{*path}", any(proxy_handler))
