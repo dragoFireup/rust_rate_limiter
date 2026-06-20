@@ -1,17 +1,17 @@
 mod configs;
 mod utils;
 
-use axum::{body::Body, response::Response, routing::any, Router};
 use axum::extract::{Request, State};
 use axum::http::{StatusCode, Uri};
 use axum::response::IntoResponse;
+use axum::{body::Body, response::Response, routing::any, Router};
 use reqwest::{Body as RBody, Client};
 use std::sync::Arc;
 use std::time::Duration;
 use utils::client_identity_extractor::extract_client_identity;
 
-use configs::rate_limiter_gateway::RateLimiterGateway;
 use configs::gateway_config::GatewayConfig;
+use configs::rate_limiter_gateway::RateLimiterGateway;
 
 struct AppState {
     gateway_config: GatewayConfig,
@@ -22,14 +22,17 @@ struct AppState {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let gateway_config = GatewayConfig {
-        limiter: RateLimiterGateway::new(Duration::from_secs(1), 10),
-        destination: "http://localhost:5000".to_string(),
-    };
-
-
-
     let http_client = Client::new();
+
+    let gateway_config = GatewayConfig::new(
+        RateLimiterGateway::new(Duration::from_secs(1), 10),
+        vec![
+            "http://localhost:5000".to_string(),
+            "http://localhost:5001".to_string(),
+        ],
+        http_client.clone(),
+    )
+    .await;
 
     let shared_state = Arc::new(AppState {
         gateway_config: gateway_config,
@@ -63,7 +66,14 @@ async fn proxy_handler(
             .unwrap();
     }
 
-    let backend_url = format!("{}{}", state.gateway_config.destination, uri.path());
+    let Some(destination) = state.gateway_config.get_destination_endpoint() else {
+        return Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("No healthy hosts available"))
+            .unwrap();
+    };
+
+    let backend_url = format!("{}{}", destination, uri.path());
 
     let client = &state.http_client;
 
@@ -90,4 +100,3 @@ async fn proxy_handler(
         .body(Body::from_stream(proxy_response.bytes_stream()))
         .unwrap();
 }
-
