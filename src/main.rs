@@ -1,20 +1,17 @@
-mod rate_limiter_gateway;
-pub mod sliding_window_log;
+mod configs;
+mod utils;
 
-use ::axum::{body::Body, response::Response, routing::any, Router};
+use axum::{body::Body, response::Response, routing::any, Router};
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, StatusCode, Uri};
+use axum::http::{StatusCode, Uri};
 use axum::response::IntoResponse;
 use reqwest::{Body as RBody, Client};
 use std::sync::Arc;
 use std::time::Duration;
+use utils::client_identity_extractor::extract_client_identity;
 
-use rate_limiter_gateway::RateLimiterGateway;
-
-struct GatewayConfig {
-    limiter: RateLimiterGateway,
-    destination: String,
-}
+use configs::rate_limiter_gateway::RateLimiterGateway;
+use configs::gateway_config::GatewayConfig;
 
 struct AppState {
     gateway_config: GatewayConfig,
@@ -27,8 +24,10 @@ async fn main() {
 
     let gateway_config = GatewayConfig {
         limiter: RateLimiterGateway::new(Duration::from_secs(1), 10),
-        destination: "http://host.docker.internal:5000".to_string(),
+        destination: "http://localhost:5000".to_string(),
     };
+
+
 
     let http_client = Client::new();
 
@@ -92,9 +91,3 @@ async fn proxy_handler(
         .unwrap();
 }
 
-fn extract_client_identity(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get("ClientId")
-        .and_then(|value| value.to_str().ok())
-        .map(|s| s)
-}

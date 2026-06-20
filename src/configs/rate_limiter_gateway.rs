@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 
-use crate::sliding_window_log::SlidingWindowLog;
+use super::sliding_window_log::SlidingWindowLog;
 
 pub struct RateLimiterGateway {
     window_size: Duration,
