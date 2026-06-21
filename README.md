@@ -69,6 +69,8 @@ graph TD
 - [Rust](https://www.rust-lang.org/tools/install) (Edition 2021, Rust 1.75+ recommended)
 - [Docker](https://docs.docker.com/get-docker/) (optional)
 
+### 1. Running Locally
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-username/rust-rate-limiter.git
@@ -78,7 +80,7 @@ cd rust-rate-limiter
 cargo run
 ```
 
-### 3. Running with Docker
+### 2. Running with Docker
 
 ```bash
 # Build the production image
