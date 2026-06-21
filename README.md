@@ -1,65 +1,206 @@
 # Rust Rate Limiter Proxy
 
-A high-performance, thread-safe rate limiting proxy implemented in Rust using the Axum web framework. This project serves as a robust implementation of the **Sliding Window Log** algorithm, designed to handle high-concurrency traffic with minimal overhead.
+A high-performance, thread-safe rate-limiting reverse proxy implemented in Rust using the [Axum](https://github.com/tokio-rs/axum) web framework. This project serves as a robust implementation of the **Sliding Window Log** algorithm, designed to handle high-concurrency traffic with minimal overhead, active health checks, and round-robin load balancing.
 
-## 🚀 Overview
+---
 
-This repository implements a **Sliding Window Log** rate limiter that acts as a transparent proxy. It identifies clients via a `ClientId` header and enforces per-client rate limits before forwarding requests to a backend destination.
+## 🚀 Architecture Overview
 
-### Key Technical Highlights
-- **Thread-Safe Architecture:** Uses a combination of `RwLock` for the client registry and granular `Mutex` locks for individual client logs, enabling high parallel throughput.
-- **Sliding Window Log Algorithm:** Provides precise rate limiting by tracking individual request timestamps within a moving time window.
-- **Zero-Allocation Fast Path:** Optimized lookup logic using `&str` and the Entry API to minimize heap allocations during hot paths.
-- **Robust Time Handling:** Leverages `std::time::Instant` for monotonic time calculations, resilient against system clock shifts.
+The proxy acts as an intermediary gateway between clients and backend microservices. When a request arrives, it flows through the following pipeline:
+
+```mermaid
+graph TD
+    Client[Client Request] --> Extractor[Client Identity Extractor]
+    Extractor -->|No ClientId Header| AuthErr[401 Unauthorized]
+    Extractor -->|Has ClientId| Limiter[Sliding Window Rate Limiter]
+    Limiter -->|Rate Limit Exceeded| LimitErr[429 Too Many Requests]
+    Limiter -->|Allowed| LoadBalancer[Round-Robin Load Balancer]
+    LoadBalancer -->|No Healthy Backends| ServiceErr[503 Service Unavailable]
+    LoadBalancer -->|Healthy Backend Found| Proxy[Request Proxying & Streaming]
+    Proxy -->|Success| Client
+    Proxy -->|Backend Connection Failure| GatewayErr[502 Bad Gateway]
+```
+
+### Key Components
+
+1. **Client Identity Extractor**: Parses incoming headers to identify the client using the `ClientId` header.
+2. **Sliding Window Log Rate Limiter**: Provides precise rate limiting per client ID. It tracks individual request timestamps in a thread-safe sliding window.
+3. **Round-Robin Load Balancer**: Distributes traffic across a pool of active backend destinations.
+4. **Active Health Checker**: Dynamically monitors the health of backend servers by periodically pinging their `/health` endpoint in a background thread, enabling auto-recovery and failover.
 
 ---
 
 ## 🛠 Features
 
-- **Per-Client Rate Limiting:** Track and limit requests based on the `ClientId` HTTP header.
-- **Transparent Proxying:** Forwards allowed requests to a configurable backend destination.
-- **Granular Locking:** Uses "Double-Checked Locking" to ensure thread safety when adding new clients without blocking existing ones.
-- **Dockerized:** Optimized Dockerfile for small image size and easy deployment.
+- **Per-Client Rate Limiting**: Isolate and limit requests dynamically using the `ClientId` header.
+- **Double-Checked Lock Pattern**: Lock contention is minimized by using a read-write lock (`RwLock`) on the client registry and granular mutexes (`Mutex`) on individual client logs.
+- **Zero-Allocation Fast Path**: Efficient check paths lookup with `&str` references and entry APIs to avoid unnecessary allocations during high-throughput requests.
+- **Active Health Monitoring & Auto-Failover**: Uses `ArcSwap` for lock-free backend host updates, dynamically removing unhealthy nodes and restoring them once they recover.
+- **Monotonic Time Resilience**: Uses `std::time::Instant` to prevent clock manipulation from affecting the rate limits.
+- **Fully Streaming Proxy**: Leverages Axum and reqwest's streaming capabilities to forward request and response bodies without buffering them fully into memory.
+- **Dockerized**: A slim Docker configuration to minimize deployment footprints.
+
+---
+
+## 📂 Project Structure
+
+```text
+├── Cargo.toml                  # Dependencies & Rust edition configuration
+├── Dockerfile                  # Multi-stage optimized Docker build configuration
+├── README.md                   # Project documentation
+└── src
+    ├── configs
+    │   ├── gateway_config.rs   # Balancer, Active Health Check, and Host registry
+    │   ├── mod.rs              # Mod declaration for configs module
+    │   ├── rate_limiter_gateway.rs # Rate Limiter registry with RwLock/Mutex pattern
+    │   └── sliding_window_log.rs   # Sliding Window Log eviction & check logic
+    ├── main.rs                 # Web entry point, background loops, and route handling
+    └── utils
+        ├── client_identity_extractor.rs # Client header extraction logic
+        └── mod.rs              # Mod declaration for utils module
+```
 
 ---
 
 ## 📦 Getting Started
 
 ### Prerequisites
-- [Rust](https://www.rust-lang.org/tools/install) (Edition 2021)
+
+- [Rust](https://www.rust-lang.org/tools/install) (Edition 2021, Rust 1.75+ recommended)
 - [Docker](https://docs.docker.com/get-docker/) (optional)
 
-### Running Locally
+### 1. Run Mock Backend Services (Optional but Recommended)
+
+Since the proxy routes requests to backends configured in `src/main.rs` (defaulting to `http://localhost:5000` and `http://localhost:5001`), you can run mock backends that support a `/health` endpoint to test load balancing.
+
+Save and run this simple python script as `mock_backend.py` to spawn mock backends:
+
+```python
+import sys
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class MockBackendHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+        else:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(f"Hello from Backend on port {self.server.server_port}! Path: {self.path}\n".encode())
+
+if __name__ == '__main__':
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
+    server = HTTPServer(('localhost', port), MockBackendHandler)
+    print(f"Mock backend running on port {port}...")
+    server.serve_forever()
+```
+
+Run two instances in separate terminals:
+```bash
+python3 mock_backend.py 5000
+python3 mock_backend.py 5001
+```
+
+### 2. Running the Proxy Locally
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-username/rust-rate-limiter.git
 cd rust-rate-limiter
 
-# Run the proxy (listens on port 3000)
+# Run the proxy (defaults to port 3000)
 cargo run
 ```
 
-### Running with Docker
+### 3. Running with Docker
+
 ```bash
-# Build the image
+# Build the production image
 docker build -t rate-limiter:v2 .
 
-# Run the container
-docker run -d -p 3000:3000 --add-host=host.docker.internal:host-gateway --name operational-gateway rate_limiter:v2
+# Run the container (binds to host port 3000)
+docker run -d -p 3000:3000 \
+  --add-host=host.docker.internal:host-gateway \
+  --name operational-gateway \
+  rate-limiter:v2
 ```
 
-Exceed the rate limit and you will notice 429 as a response
 ---
 
-## 🗺 Roadmap
+## 🧪 Verification & Testing
 
-- [x] Basic Sliding Window Log implementation.
-- [x] Dockerization of the Rust application.
-- [x] **Middleware Support:** Integration with Axum proxy.
-- [x] **ClientId based ratelimiter.**
+Verify that rate-limiting, load balancing, and health checking work using `curl`.
+
+### Test 1: Missing Client Identity Header
+```bash
+curl -i http://localhost:3000/
+```
+**Expected Response**: `401 Unauthorized`
+
+### Test 2: Successful Request and Round-Robin Routing
+```bash
+curl -i -H "ClientId: client-1" http://localhost:3000/
+curl -i -H "ClientId: client-1" http://localhost:3000/
+```
+**Expected Response**: Alternating responses from backend `5000` and backend `5001`:
+```text
+Hello from Backend on port 5000! Path: /
+Hello from Backend on port 5001! Path: /
+```
+
+### Test 3: Exceeding Rate Limit
+By default, the rate limit is configured to **10 requests per 1 second** per client. Run a quick loop to exceed the rate limit:
+```bash
+for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" -H "ClientId: client-2" http://localhost:3000/; done
+```
+**Expected Response**: The first 10 requests return `200`, followed by `429` for the subsequent requests:
+```text
+200
+...
+200
+429
+429
+```
+
+---
+
+## ⚙️ Configuration
+
+You can customize the proxy behavior by modifying [src/main.rs](src/main.rs):
+
+```rust
+// In src/main.rs
+let gateway_config = GatewayConfig::new(
+    // RateLimiterGateway::new(sliding_window_duration, max_requests_per_window)
+    RateLimiterGateway::new(Duration::from_secs(1), 10),
+    
+    // Configured backend host list
+    vec![
+        "http://localhost:5000".to_string(),
+        "http://localhost:5001".to_string(),
+    ],
+    http_client.clone(),
+)
+.await;
+```
+
+---
+
+## 🛡 Status Codes Reference
+
+The proxy returns specific status codes to signal proxy-related states:
+
+| Status Code | Description | Trigger Condition |
+| :--- | :--- | :--- |
+| **`401 Unauthorized`** | Unauthorized | Request is missing the `ClientId` header. |
+| **`429 Too Many Requests`** | Rate Limit Exceeded | Client exceeded the configured requests limit within the window. |
+| **`502 Bad Gateway`** | Bad Gateway | The backend destination is online but failed to complete the request. |
+| **`503 Service Unavailable`** | Service Unavailable | All backend destinations failed health checks. |
 
 ---
 
 ## 📝 License
 
-This project is open-source and available under the MIT License.
+This project is open-source and available under the [MIT License](LICENSE).
