@@ -69,42 +69,6 @@ graph TD
 - [Rust](https://www.rust-lang.org/tools/install) (Edition 2021, Rust 1.75+ recommended)
 - [Docker](https://docs.docker.com/get-docker/) (optional)
 
-### 1. Run Mock Backend Services (Optional but Recommended)
-
-Since the proxy routes requests to backends configured in `src/main.rs` (defaulting to `http://localhost:5000` and `http://localhost:5001`), you can run mock backends that support a `/health` endpoint to test load balancing.
-
-Save and run this simple python script as `mock_backend.py` to spawn mock backends:
-
-```python
-import sys
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-class MockBackendHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"OK")
-        else:
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(f"Hello from Backend on port {self.server.server_port}! Path: {self.path}\n".encode())
-
-if __name__ == '__main__':
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
-    server = HTTPServer(('localhost', port), MockBackendHandler)
-    print(f"Mock backend running on port {port}...")
-    server.serve_forever()
-```
-
-Run two instances in separate terminals:
-```bash
-python3 mock_backend.py 5000
-python3 mock_backend.py 5001
-```
-
-### 2. Running the Proxy Locally
-
 ```bash
 # Clone the repository
 git clone https://github.com/your-username/rust-rate-limiter.git
@@ -122,7 +86,6 @@ docker build -t rate-limiter:v2 .
 
 # Run the container (binds to host port 3000)
 docker run -d -p 3000:3000 \
-  --add-host=host.docker.internal:host-gateway \
   --name operational-gateway \
   rate-limiter:v2
 ```
